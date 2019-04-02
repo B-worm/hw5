@@ -1,0 +1,190 @@
+第一、二题函数
+function [image,alpha]=my_filter(img,method,type,R,N)%img为输入图像矩阵，method选择滤波器，type为高通或者低通，R为D0，N为巴特沃斯滤波器的阶数
+[m,n]=size(img);
+temp=zeros(2*m,2*n);
+temp(1:m,1:n)=img;
+
+a=-1;b=-1;%搬移到中心
+P_o=0;P_f=0;
+for i=1:m
+    for j=1:n
+        temp(i,j)=temp(i,j)*a*b;
+        b=-b;
+    end
+    a=-a;
+    b=-1;
+end
+
+ss=fft2(temp);
+[m1,n1]=size(ss);
+
+p=floor(m1/2);q=floor(n1/2);
+h=zeros(m1,n1); s=zeros(m1,n1);
+if(strcmp(method,'gaussian'))
+    if(strcmp(type,'low_pass'))
+        for i=1:m1
+            for j=1:n1
+                power=((i-p)^2+(j-q)^2)/(2*R^2);
+                h(i,j)=exp(-power);
+                P_o=P_o+abs(ss(i,j)).*abs(ss(i,j));
+                s(i,j)=ss(i,j)*h(i,j);
+                P_f=P_f+abs(s(i,j)).*abs(s(i,j));
+            end
+        end
+    end
+    
+    if(strcmp(type,'high_pass'))
+        for i=1:m1
+            for j=1:n1
+                power=((i-p)^2+(j-q)^2)/(2*R^2);
+                h(i,j)=1-exp(-power);
+                P_o=P_o+abs(ss(i,j)).*abs(ss(i,j));
+                s(i,j)=ss(i,j)*h(i,j);
+                P_f=P_f+abs(s(i,j)).*abs(s(i,j));
+            end
+        end
+    end
+    
+end
+
+if(strcmp(method,'butterworth'))
+    if(strcmp(type,'low_pass'))
+        for i=1:m1
+            for j=1:n1
+                D=((i-p)^2+(j-q)^2)^0.5;
+                h(i,j)=1/(1+(D/R)^2*N);
+                P_o=P_o+abs(ss(i,j)).*abs(ss(i,j));
+                s(i,j)=ss(i,j)*h(i,j);
+                P_f=P_f+abs(s(i,j)).*abs(s(i,j));
+            end
+        end
+    end
+    
+    if(strcmp(type,'high_pass'))
+        for i=1:m1
+            for j=1:n1
+                D=((i-p)^2+(j-q)^2)^0.5;
+                h(i,j)=1/(1+(R/D)^(2*N));
+                P_o=P_o+abs(ss(i,j)).*abs(ss(i,j));
+                s(i,j)=ss(i,j)*h(i,j);
+                P_f=P_f+abs(s(i,j)).*abs(s(i,j));
+            end
+        end
+    end
+    
+end
+
+
+p1=(abs(ss)).*(abs(ss));
+p1=1+log(p1);
+
+p1=reshape(p1,[1,m1*n1]);
+
+p2=abs(s).*abs(s);
+p2=1+log(p2);
+p2=reshape(p2,[1,m1*n1]);
+
+P=[p1,p2];
+P=mapminmax(P,0,255);
+p1=reshape(P(1:m1*n1),[m1,n1]);
+p1=uint8(p1);
+
+p2=reshape(P(m1*n1+1:2*m1*n1),[m1,n1]);
+p2=uint8(p2);
+
+p3=h.*h;
+p3=reshape(p3,[1,m1*n1]);
+p3=mapminmax(p3,0,255);
+p3=reshape(p3,[m1,n1]);
+p3=uint8(p3);
+
+change_temp=ifft2(s);
+image=real(change_temp(1:m,1:n));
+a=-1;b=-1;
+for i=1:m
+    for j=1:n
+        image(i,j)=image(i,j)*a*b;
+        b=-b;
+    end
+    a=-a;
+    b=-1;
+end
+image=uint8(image);
+alpha=100*P_f/P_o;
+
+figure;imshow(p3);title('filter freq image')
+figure;
+subplot(2,2,1);imshow(img);title('original image');
+subplot(2,2,2);imshow(image);title('changed image');
+subplot(223);imshow(p1);title('original freq image');
+subplot(224);imshow(p2);title('changed freq image');
+
+end
+
+
+第三题代码
+function img=other_high_pass_filter(img,method,k)%img为输入图像矩阵，method选择滤波方法，k调节锐化图像加到原图像的比例。
+[m,n]=size(img);
+temp=zeros(2*m,2*n);
+temp(1:m,1:n)=img;
+a=-1;b=-1;
+for i=1:m
+    for j=1:n
+        temp(i,j)=temp(i,j)*a*b;
+        b=-b;
+    end
+    a=-a;
+    b=-1;
+end
+ss=fft2(temp);
+[m1,n1]=size(ss);
+
+p=floor(m1/2);q=floor(n1/2);
+h=zeros(m1,n1); s=zeros(m1,n1);
+if(strcmp(method,'laplacian'))
+    enhance_s=zeros(m1,n1);
+    for i=1:m1
+        for j=1:n1
+            
+            D=((i-p)^2+(j-q)^2)^0.5;
+            h(i,j)=k*(D^2)*4*pi^2;
+            s(i,j)=ss(i,j)*h(i,j);
+            enhance_s(i,j)=ss(i,j)*(1+h(i,j));
+        end
+    end
+end
+if(strcmp(method,'unmask'))
+    enhance_s=zeros(m1,n1);
+    for i=1:m1
+        for j=1:n1
+            
+            D=((i-p)^2+(j-q)^2)^0.5;
+            h(i,j)=exp(-D/2000);
+            h(i,j)=k*(1-h(i,j));
+            s(i,j)=ss(i,j)*h(i,j);
+            enhance_s(i,j)=ss(i,j)*(1+h(i,j));
+        end
+    end
+end
+change_temp=ifft2(s);
+filter=ifft2(enhance_s);
+image=real(change_temp(1:m,1:n));
+filter_im=real(filter(1:m,1:n));
+a=-1;b=-1;
+for i=1:m
+    for j=1:n
+        image(i,j)=image(i,j)*a*b;
+        filter_im(i,j)=filter_im(i,j)*a*b;
+        b=-b;
+    end
+    a=-a;
+    b=-1;
+end
+image=uint8(image);
+filter_im=uint8(filter_im);
+
+figure;
+subplot(131);imshow(img);title('original image');
+subplot(132);imshow(image);title('edge image');
+subplot(133);imshow(filter_im);title('enhance image');
+end
